@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Çöp Sınıflandırma</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <style>
+        .camera-container {
+            position: relative;
+            width: 100%;
+            max-width: 640px;
+        }
+        #video, #canvas {
+            width: 100%;
+            max-width: 640px;
+            height: auto;
+        }
+        #canvas {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold text-center mb-8">Çöp Sınıflandırma Sistemi</h1>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Sol Taraf - Kamera -->
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h2 class="text-xl font-semibold mb-4">Kamera ile Sınıflandırma</h2>
+                
+                <div class="camera-container mb-4">
+                    <video id="video" class="rounded-lg"></video>
+                    <canvas id="canvas"></canvas>
+                </div>
+                
+                <div class="flex space-x-4 mb-4">
+                    <button id="startCamera" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                        Kamerayı Aç
+                    </button>
+                    <button id="stopCamera" class="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-600" disabled>
+                        Kamerayı Kapat
+                    </button>
+                    <button id="capture" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600" disabled>
+                        Resim Çek
+                    </button>
+                </div>
+                
+                <div id="capturedImage" class="mb-4 hidden">
+                    <h3 class="text-lg font-semibold mb-2">Çekilen Resim:</h3>
+                    <img id="capturedPhoto" class="rounded-lg w-full" alt="Çekilen resim">
+                </div>
+                
+                <div id="cameraResult" class="hidden">
+                    <h3 class="text-lg font-semibold mb-2">Sonuç:</h3>
+                    <p id="cameraClassName" class="text-xl"></p>
+                    <p id="cameraConfidence" class="text-gray-600"></p>
+                </div>
+            </div>
+            
+            <!-- Sağ Taraf - Dosya Yükleme -->
+            <div class="bg-white p-6 rounded-lg shadow-lg">
+                <h2 class="text-xl font-semibold mb-4">Dosya Yükleme ile Sınıflandırma</h2>
+                
+                <div class="mb-4">
+                    <input type="file" id="fileInput" accept="image/*" class="w-full p-2 border rounded">
+                </div>
+                
+                <div id="uploadedImage" class="mb-4 hidden">
+                    <h3 class="text-lg font-semibold mb-2">Yüklenen Resim:</h3>
+                    <img id="uploadedPhoto" class="rounded-lg w-full" alt="Yüklenen resim">
+                </div>
+                
+                <div id="uploadResult" class="hidden">
+                    <h3 class="text-lg font-semibold mb-2">Sonuç:</h3>
+                    <p id="uploadClassName" class="text-xl"></p>
+                    <p id="uploadConfidence" class="text-gray-600"></p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let video = document.getElementById('video');
+        let canvas = document.getElementById('canvas');
+        let startButton = document.getElementById('startCamera');
+        let stopButton = document.getElementById('stopCamera');
+        let captureButton = document.getElementById('capture');
+        let stream = null;
+
+        // Kamera başlatma
+        startButton.addEventListener('click', async () => {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({ video: true });
+                video.srcObject = stream;
+                video.play();
+                startButton.disabled = true;
+                stopButton.disabled = false;
+                captureButton.disabled = false;
+            } catch (err) {
+                console.error('Kamera erişimi hatası:', err);
+                alert('Kamera erişimi sağlanamadı!');
+            }
+        });
+
+        // Kamera kapatma
+        stopButton.addEventListener('click', () => {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                video.srcObject = null;
+                startButton.disabled = false;
+                stopButton.disabled = true;
+                captureButton.disabled = true;
+            }
+        });
+
+        // Resim çekme
+        captureButton.addEventListener('click', () => {
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            canvas.getContext('2d').drawImage(video, 0, 0);
+            
+            // Base64 formatına dönüştür
+            let imageData = canvas.toDataURL('image/jpeg');
+            
+            // Çekilen resmi göster
+            document.getElementById('capturedPhoto').src = imageData;
+            document.getElementById('capturedImage').classList.remove('hidden');
+            
+            // Sunucuya gönder
+            fetch('/capture', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ image: imageData })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('cameraResult').classList.remove('hidden');
+                    document.getElementById('cameraClassName').textContent = `Sınıf: ${data.class}`;
+                    document.getElementById('cameraConfidence').textContent = `Doğruluk: ${data.confidence}`;
+                } else {
+                    alert('Hata: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('Bir hata oluştu!');
+            });
+        });
+
+        // Dosya yükleme
+        document.getElementById('fileInput').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        document.getElementById('uploadedPhoto').src = data.image;
+                        document.getElementById('uploadedImage').classList.remove('hidden');
+                        document.getElementById('uploadResult').classList.remove('hidden');
+                        document.getElementById('uploadClassName').textContent = `Sınıf: ${data.class}`;
+                        document.getElementById('uploadConfidence').textContent = `Doğruluk: ${data.confidence}`;
+                    } else {
+                        alert('Hata: ' + data.error);
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    alert('Bir hata oluştu!');
+                });
+            }
+        });
+    </script>
+</body>
+</html>
