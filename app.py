@@ -10,7 +10,7 @@ import os
 app = Flask(__name__)
 
 # Model yükleme
-model = load_model('best_model.keras')  # Model dosya adınızı buraya yazın
+model = load_model('best_model1.keras')  # Model dosya adınızı buraya yazın
 
 # Etiket haritası
 labels_map = {0: "cardboard", 1: "glass", 2: "metal", 3: "paper", 4: "plastic"}
