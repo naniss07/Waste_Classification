@@ -1,1 +1,1 @@
-"# Cop_Siniflandirma" 
+"# Atık_Siniflandirma" 
